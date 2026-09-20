@@ -3,6 +3,7 @@ import type { Alert, Envelope, QueryResult, RuleGroup, Target } from './domain';
 const now = () => Math.floor(Date.now() / 1000);
 const targets: Target[] = [
   { scrapePool: 'prometheus', labels: { instance: 'localhost:9090', job: 'prometheus' }, health: 'up', lastScrape: new Date().toISOString() },
+  { scrapePool: 'kubernetes-pods', scrapeUrl: 'http://172.16.1.3:9253/metrics', labels: { instance: '172.16.1.3:9253', job: 'kubernetes-pods', kubernetes_namespace: 'kube-system', pod: 'nodelocaldns-tsmsn' }, discoveredLabels: { __address__: '172.16.1.3:9253', __meta_kubernetes_namespace: 'kube-system', __meta_kubernetes_pod_name: 'nodelocaldns-tsmsn' }, health: 'up', lastScrape: new Date().toISOString() },
   { scrapePool: 'node', labels: { instance: 'node-a.example:9100', job: 'node' }, health: 'up', lastScrape: new Date().toISOString() },
   { scrapePool: 'node', labels: { instance: 'node-b.example:9100', job: 'node' }, health: 'down', lastScrape: new Date().toISOString(), lastError: 'context deadline exceeded' },
 ];
@@ -56,6 +57,19 @@ const configYaml = `global:\n  scrape_interval: 15s\n  evaluation_interval: 15s\
 const droppedTargets: Target[] = [
   { discoveredLabels: { __address__: 'node-retired.example:9100', job: 'node', reason: 'relabel_drop' } },
 ];
+const scrapePools = ['kubernetes-pods', 'kubernetes-summary', 'node', 'prometheus', 'serviceMonitor/nanzang-parking/gateway-servicemonitor/0'];
+const discoveryActiveTargets: Target[] = Array.from({ length: 47 }, (_, index) => ({
+  scrapePool: 'kubernetes-pods',
+  scrapeUrl: `http://172.16.1.${index + 10}:9253/metrics`,
+  labels: { job: 'kubernetes-pods', instance: `172.16.1.${index + 10}:9253`, kubernetes_namespace: index % 2 ? 'monitoring' : 'kube-system' },
+  discoveredLabels: { __address__: `172.16.1.${index + 10}:9253`, __meta_kubernetes_pod_name: `metrics-agent-${String(index + 1).padStart(2, '0')}` },
+  health: index % 9 ? 'up' : 'down',
+  lastScrape: new Date(Date.now() - index * 3000).toISOString(),
+}));
+const discoveryDroppedTargets: Target[] = Array.from({ length: 23 }, (_, index) => ({
+  scrapePool: 'kubernetes-pods',
+  discoveredLabels: { __address__: `10.20.0.${index + 1}:9100`, job: 'kubernetes-pods', reason: 'relabel_drop' },
+}));
 
 function queryResult(method: string, form: Record<string, unknown>): Envelope<QueryResult> {
   const range = method === 'prometheus/query_range';
@@ -79,7 +93,7 @@ window.dbxPlugin = {
   context: disconnected ? {} : { connectionId: 'preview-only' },
   onContext: () => () => {},
   async invoke<T>(method: string, params: Record<string, unknown>): Promise<T> {
-    const form = (params.form || {}) as Record<string, string>;
+    const form = (params.form || {}) as Record<string, unknown>;
     let response: unknown;
     switch (method) {
       case 'prometheus/info': response = { name: 'Prometheus 演示连接', baseUrl: 'http://localhost:9090', environment: '演示环境', build: { data: { version: '3.0.0-demo' } } }; break;
@@ -95,7 +109,19 @@ window.dbxPlugin = {
       case 'prometheus/status_tsdb': response = { data: tsdbStatus }; break;
       case 'prometheus/status_flags': response = { data: flags }; break;
       case 'prometheus/status_config': response = { data: { yaml: configYaml } }; break;
-      case 'prometheus/service_discovery': response = { data: { activeTargets: targets, droppedTargets } }; break;
+      case 'prometheus/service_discovery_services': response = { data: { scrapePools } }; break;
+      case 'prometheus/service_discovery': {
+        const stateTargets = form.state === 'dropped' ? discoveryDroppedTargets : discoveryActiveTargets;
+        const selected = Array.isArray(form.scrapePools) ? form.scrapePools.map(String) : [String(form.scrapePool || '')].filter(Boolean);
+        const matching = selected.flatMap(scrapePool => scrapePool === 'kubernetes-pods'
+          ? stateTargets
+          : stateTargets.slice(0, scrapePool === 'node' ? 7 : 3).map(item => ({ ...item, scrapePool, labels: { ...item.labels, job: scrapePool } })));
+        const page = Number(form.page) || 1;
+        const pageSize = Number(form.pageSize) || 20;
+        const start = (page - 1) * pageSize;
+        response = { data: { items: matching.slice(start, start + pageSize), total: matching.length, page, pageSize, hasNext: start + pageSize < matching.length, scrapePools: selected, state: form.state } };
+        break;
+      }
       default: throw new Error(`未知演示接口: ${method}`);
     }
     return response as T;

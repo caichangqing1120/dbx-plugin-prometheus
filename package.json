@@ -1,6 +1,6 @@
 {
   "name": "prometheus-dbx-plugin",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "private": false,
   "type": "module",
   "scripts": {

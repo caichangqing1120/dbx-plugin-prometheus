@@ -10,7 +10,7 @@ import (
 )
 
 const pluginID = "io.github.caichangqing1120.prometheus"
-const version = "0.1.4"
+const version = "0.1.6"
 
 type request struct {
 	Connection   connection      `json:"connection"`
@@ -77,7 +77,7 @@ func (p *plugin) handle(method string, input request) (any, error) {
 		}
 		return map[string]any{"success": true}, nil
 	}
-	if method != "prometheus/info" && method != "prometheus/query" && method != "prometheus/query_range" && method != "prometheus/targets" && method != "prometheus/alerts" && method != "prometheus/rules" && method != "prometheus/metric_names" && method != "prometheus/label_names" && method != "prometheus/label_values" && method != "prometheus/status_runtime" && method != "prometheus/status_tsdb" && method != "prometheus/status_flags" && method != "prometheus/status_config" && method != "prometheus/service_discovery" {
+	if method != "prometheus/info" && method != "prometheus/query" && method != "prometheus/query_range" && method != "prometheus/targets" && method != "prometheus/alerts" && method != "prometheus/rules" && method != "prometheus/metric_names" && method != "prometheus/label_names" && method != "prometheus/label_values" && method != "prometheus/status_runtime" && method != "prometheus/status_tsdb" && method != "prometheus/status_flags" && method != "prometheus/status_config" && method != "prometheus/service_discovery_services" && method != "prometheus/service_discovery" {
 		return nil, errors.New("不支持的操作")
 	}
 	p.mu.RLock()

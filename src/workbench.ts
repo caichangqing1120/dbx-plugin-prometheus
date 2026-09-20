@@ -44,3 +44,28 @@ export function queryWindow(evaluationTime: Date, hours: number): { start: numbe
 export function shiftEvaluationTime(value: Date, minutes: number): Date {
   return new Date(value.getTime() + minutes * 60_000);
 }
+
+export function filterScrapePools(scrapePools: string[], search: string): string[] {
+  const query = search.trim().toLowerCase();
+  return [...new Set(scrapePools.map(item => item.trim()).filter(Boolean))]
+    .filter(item => !query || item.toLowerCase().includes(query))
+    .sort((a, b) => a.localeCompare(b));
+}
+
+export function toggleScrapePool(selected: string[], scrapePool: string, limit = 20): string[] {
+  const value = scrapePool.trim();
+  if (!value) return selected;
+  if (selected.includes(value)) return selected.filter(item => item !== value);
+  if (selected.length >= limit) return selected;
+  return [...selected, value];
+}
+
+export function discoveryPageRange(page: number, pageSize: number, total: number) {
+  if (total <= 0) return { from: 0, to: 0, canPrevious: false, canNext: false };
+  return {
+    from: (page - 1) * pageSize + 1,
+    to: Math.min(page * pageSize, total),
+    canPrevious: page > 1,
+    canNext: page * pageSize < total,
+  };
+}

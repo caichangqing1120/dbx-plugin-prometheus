@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { addHistoryEntry, connectionExperience, createPanel, queryWindow, shiftEvaluationTime } from './workbench';
+import {
+  addHistoryEntry,
+  connectionExperience,
+  createPanel,
+  discoveryPageRange,
+  filterScrapePools,
+  queryWindow,
+  shiftEvaluationTime,
+  toggleScrapePool,
+} from './workbench';
 
 describe('PromQL workbench state', () => {
   it('creates independent query panels with stable defaults', () => {
@@ -24,5 +33,23 @@ describe('PromQL workbench state', () => {
       description: '当前标签页未绑定连接。请在 DBX 左侧连接列表中双击 Prometheus 连接，打开对应的工作台。',
     });
     expect(connectionExperience('connection-1')).toEqual({ connected: true, title: '', description: '' });
+  });
+
+  it('filters service discovery scrape pools without loading targets', () => {
+    expect(filterScrapePools(['node', 'kubernetes-pods', 'node', 'serviceMonitor/gateway/0'], 'node')).toEqual(['node']);
+    expect(filterScrapePools(['node', 'kubernetes-pods', 'serviceMonitor/gateway/0'], 'service')).toEqual(['serviceMonitor/gateway/0']);
+    expect(filterScrapePools(Array.from({ length: 15 }, (_, index) => `service-${index}`), '')).toHaveLength(15);
+  });
+
+  it('keeps selection separate from the service search keyword', () => {
+    expect(toggleScrapePool([], 'node')).toEqual(['node']);
+    expect(toggleScrapePool(['node'], 'kubernetes-pods')).toEqual(['node', 'kubernetes-pods']);
+    expect(toggleScrapePool(['node', 'kubernetes-pods'], 'node')).toEqual(['kubernetes-pods']);
+  });
+
+  it('describes discovery pagination boundaries', () => {
+    expect(discoveryPageRange(2, 20, 45)).toEqual({ from: 21, to: 40, canPrevious: true, canNext: true });
+    expect(discoveryPageRange(3, 20, 45)).toEqual({ from: 41, to: 45, canPrevious: true, canNext: false });
+    expect(discoveryPageRange(1, 20, 0)).toEqual({ from: 0, to: 0, canPrevious: false, canNext: false });
   });
 });

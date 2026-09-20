@@ -16,7 +16,8 @@ The connection check reads `/api/v1/status/buildinfo`. The workbench offers:
 - Instant and range PromQL queries; ranges are limited to 11,000 points, responses to 4 MiB and displayed series to 100.
 - Active scrape targets, health and last errors (`/api/v1/targets`).
 - Active alerts (`/api/v1/alerts`) and recording/alerting rule groups (`/api/v1/rules`).
-- Runtime/build information, TSDB cardinality, command-line flags, loaded configuration and service discovery status (`/api/v1/status/*`, `/api/v1/targets?state=any`).
+- Runtime/build information, TSDB cardinality, command-line flags and loaded configuration (`/api/v1/status/*`).
+- Multi-select service discovery browsing: load scrape pools from `/api/v1/scrape_pools`, search only by the typed keyword, select up to 20 pools, and query active or dropped targets as one paginated result. The sidecar streams each selected response, counts the combined targets and returns only the requested 20, 50 or 100 item page.
 
 All requests use GET and fixed endpoint paths; redirects are rejected. A query is executed against the configured Prometheus server, so restrict connection access and query size as appropriate to your environment. There are no native listeners, child processes or persistent plugin files.
 
@@ -35,10 +36,10 @@ npm run build
 go -C backend test -race ./...
 go -C backend vet ./...
 npm run package:all
-go run scripts/verify-package.go dist/io.github.caichangqing1120.prometheus-0.1.4-darwin-arm64.dbxp --handshake
+go run scripts/verify-package.go dist/io.github.caichangqing1120.prometheus-0.1.6-darwin-arm64.dbxp --handshake
 ```
 
-The packaging script produces six unsigned macOS, Windows and Linux ARM64/x64 candidates, checksums, per-target metadata and `dist/release-candidates.json`. Cross-built packages are checked for architecture and checksum but have not been run in DBX on each OS. The macOS ARM64 `0.1.4` package was installed in DBX and exercised against Prometheus `2.47.2` for PromQL, targets and status endpoints; backend tests also use an `httptest` fixture and UI checks use synthetic data.
+The packaging script produces six unsigned macOS, Windows and Linux ARM64/x64 candidates, checksums, per-target metadata and `dist/release-candidates.json`. Cross-built packages are checked for architecture and checksum but have not been run in DBX on each OS. The macOS ARM64 `0.1.6` candidate is tested against Prometheus `2.47.2` for scrape-pool discovery and multi-service target pagination; backend tests use an `httptest` fixture and UI checks use synthetic data. Packaged DBX installation evidence is recorded separately from source and preview verification.
 
 ## Marketplace
 

@@ -7,5 +7,5 @@
   "source": "https://github.com/caichangqing1120/dbx-plugin-prometheus",
   "homepage": "https://github.com/caichangqing1120/dbx-plugin-prometheus",
   "license": "MIT",
-  "releaseNotes": "Add a full read-only Prometheus workbench with PromQL highlighting and server-backed completion, multi-panel table and graph queries, metric exploration, query history, targets, alerts, rules, runtime/build details, TSDB cardinality, flags, configuration and service discovery status."
+  "releaseNotes": "Add multi-select service discovery browsing. Search only follows the typed keyword, selected services remain independently visible and removable, and targets from up to 20 services are streamed, merged and paginated across active or dropped states."
 }

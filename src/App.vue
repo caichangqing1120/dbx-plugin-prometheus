@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue';
 import {
-  Activity, AlertCircle, Bell, Braces, ChevronLeft, ChevronRight, Clock3, History, ListFilter,
+  Activity, AlertCircle, Bell, Braces, Check, ChevronLeft, ChevronRight, Clock3, History, ListFilter,
   Monitor, Moon, Play, Plus, RefreshCw, Search, Server, Sun, Trash2, X,
 } from '@lucide/vue';
 import prometheusLogo from '../assets/plugin.svg?inline';
@@ -10,7 +10,17 @@ import PromQLEditor from './PromQLEditor.vue';
 import { numericValue, plot, seriesName, type Alert, type BuildInfo, type Envelope, type QueryResult, type RuleGroup, type RuntimeInfo, type Series, type StatusEntry, type Target, type TSDBStatus } from './domain';
 import { BridgePrometheusClient } from './prometheus-client';
 import { browserStorage, readStorage, writeStorage } from './storage';
-import { addHistoryEntry, connectionExperience, createPanel, queryWindow, shiftEvaluationTime, type QueryPanel } from './workbench';
+import {
+  addHistoryEntry,
+  connectionExperience,
+  createPanel,
+  discoveryPageRange,
+  filterScrapePools,
+  queryWindow,
+  shiftEvaluationTime,
+  toggleScrapePool,
+  type QueryPanel,
+} from './workbench';
 
 type Tab = 'query' | 'targets' | 'alerts' | 'rules' | 'status';
 type StatusView = 'runtime' | 'tsdb' | 'flags' | 'config' | 'discovery';
@@ -36,12 +46,16 @@ const connectionId = ref(''), info = ref<Info>();
 const panels = ref<QueryPanel[]>([createPanel('panel-1', 'up')]);
 const targets = ref<Target[]>([]), alerts = ref<Alert[]>([]), groups = ref<RuleGroup[]>([]);
 const statusView = ref<StatusView>('runtime'), runtimeInfo = ref<RuntimeInfo>({}), tsdbStatus = ref<TSDBStatus>({});
-const flags = ref<Record<string, string>>({}), configYaml = ref(''), droppedTargets = ref<Target[]>([]);
+const flags = ref<Record<string, string>>({}), configYaml = ref('');
 const filter = ref(''), pageLoading = ref(false), pageError = ref(''), fetchedAt = ref('');
 const localTime = ref(true), historyEnabled = ref(true), autocomplete = ref(true), highlighting = ref(true), linter = ref(true);
 const history = ref<string[]>([]), historyPanel = ref('');
 const completionClient = shallowRef<BridgePrometheusClient>();
 const metricPanel = ref(''), metricFilter = ref(''), metrics = ref<string[]>([]), metricsLoading = ref(false), metricError = ref('');
+const scrapePools = ref<string[]>([]), discoverySearch = ref(''), selectedScrapePools = ref<string[]>([]);
+const discoveryTargets = ref<Target[]>([]), discoveryState = ref<'active' | 'dropped'>('active');
+const discoveryPage = ref(1), discoveryPageSize = ref(20), discoveryTotal = ref(0), discoveryHasNext = ref(false);
+const discoverySuggestionsOpen = ref(false), discoverySuggestionIndex = ref(0);
 const rangeHours = ref(1), step = ref(30), evaluationTime = ref(new Date());
 const theme = ref<Theme>('system'), systemDark = ref(false);
 let generation = 0, panelSequence = 1, unsubscribe: (() => void) | undefined, media: MediaQueryList | undefined;
@@ -52,8 +66,8 @@ const visibleAlerts = computed(() => alerts.value.filter(item => `${item.labels?
 const visibleGroups = computed(() => groups.value.filter(item => `${item.name} ${item.file} ${item.rules?.map(rule => rule.name).join(' ')}`.toLowerCase().includes(filter.value.toLowerCase())));
 const healthy = computed(() => targets.value.filter(item => item.health === 'up').length);
 const visibleFlags = computed(() => Object.entries(flags.value).filter(([key, value]) => `${key} ${value}`.toLowerCase().includes(filter.value.toLowerCase())));
-const visibleDiscoveryTargets = computed(() => targets.value.filter(item => `${item.scrapePool} ${labelMap(item.labels)} ${labelMap(item.discoveredLabels)} ${item.scrapeUrl}`.toLowerCase().includes(filter.value.toLowerCase())));
-const visibleDroppedTargets = computed(() => droppedTargets.value.filter(item => `${labelMap(item.labels)} ${labelMap(item.discoveredLabels)}`.toLowerCase().includes(filter.value.toLowerCase())));
+const discoverySuggestionItems = computed(() => filterScrapePools(scrapePools.value, discoverySearch.value));
+const discoveryRange = computed(() => discoveryPageRange(discoveryPage.value, discoveryPageSize.value, discoveryTotal.value));
 const tsdbTables = computed<Array<{ title: string; items: StatusEntry[]; bytes?: boolean }>>(() => [
   { title: '按指标名统计序列', items: tsdbStatus.value.seriesCountByMetricName || [] },
   { title: '按标签名统计值', items: tsdbStatus.value.labelValueCountByLabelName || [] },
@@ -77,6 +91,56 @@ function panelSamples(panel: QueryPanel): Series[] {
   return [{ metric: {}, value: panel.result.result as [number, string] }];
 }
 function labelMap(value?: Record<string, string>): string { return Object.entries(value || {}).filter(([key]) => key !== '__name__').map(([key, val]) => `${key}=${val}`).join(' · '); }
+async function toggleDiscoverySuggestion(value: string) {
+  const next = toggleScrapePool(selectedScrapePools.value, value);
+  if (next === selectedScrapePools.value) {
+    pageError.value = '一次最多选择 20 个服务';
+    return;
+  }
+  selectedScrapePools.value = next;
+  discoverySearch.value = '';
+  discoverySuggestionsOpen.value = true;
+  discoverySuggestionIndex.value = 0;
+  discoveryPage.value = 1;
+  if (next.length) await loadDiscoveryTargets();
+  else {
+    discoveryTargets.value = [];
+    discoveryTotal.value = 0;
+    discoveryHasNext.value = false;
+  }
+}
+function moveDiscoverySuggestion(offset: number) {
+  const count = discoverySuggestionItems.value.length;
+  if (!count) return;
+  discoverySuggestionsOpen.value = true;
+  discoverySuggestionIndex.value = (discoverySuggestionIndex.value + offset + count) % count;
+}
+function submitDiscoverySearch() {
+  const suggestions = discoverySuggestionItems.value;
+  const exact = scrapePools.value.find(item => item === discoverySearch.value.trim());
+  const selected = discoverySuggestionsOpen.value ? suggestions[discoverySuggestionIndex.value] : exact || suggestions[0];
+  if (selected) void toggleDiscoverySuggestion(selected);
+}
+function handleDiscoveryInput() {
+  discoverySuggestionIndex.value = 0;
+  discoverySuggestionsOpen.value = true;
+}
+async function setDiscoveryState(state: 'active' | 'dropped') {
+  if (discoveryState.value === state) return;
+  discoveryState.value = state;
+  discoveryPage.value = 1;
+  if (selectedScrapePools.value.length) await loadDiscoveryTargets();
+}
+async function setDiscoveryPageSize() {
+  discoveryPage.value = 1;
+  if (selectedScrapePools.value.length) await loadDiscoveryTargets();
+}
+async function moveDiscoveryPage(offset: number) {
+  const next = discoveryPage.value + offset;
+  if (next < 1 || (offset > 0 && !discoveryHasNext.value)) return;
+  discoveryPage.value = next;
+  await loadDiscoveryTargets();
+}
 function statusEntries(value?: Record<string, unknown>): Array<[string, unknown]> { return Object.entries(value || {}).sort(([a], [b]) => a.localeCompare(b)); }
 function statusValue(value: unknown): string { return value === undefined || value === null || value === '' ? '—' : typeof value === 'object' ? JSON.stringify(value) : String(value); }
 function formatBytes(value?: number): string {
@@ -177,19 +241,49 @@ async function loadPage() {
         const response = await invoke<Envelope<{ yaml?: string }>>(id, 'prometheus/status_config');
         if (gen === generation) configYaml.value = response.data.yaml || '';
       } else {
-        const response = await invoke<Envelope<{ activeTargets?: Target[]; droppedTargets?: Target[] }>>(id, 'prometheus/service_discovery');
-        if (gen === generation) { targets.value = response.data.activeTargets || []; droppedTargets.value = response.data.droppedTargets || []; }
+        const response = await invoke<Envelope<{ scrapePools?: string[] }>>(id, 'prometheus/service_discovery_services');
+        if (gen === generation) {
+          scrapePools.value = response.data.scrapePools || [];
+          const selected = selectedScrapePools.value.filter(item => scrapePools.value.includes(item));
+          if (selected.length !== selectedScrapePools.value.length) {
+            selectedScrapePools.value = selected;
+            discoveryTargets.value = [];
+            discoveryTotal.value = 0;
+          }
+        }
       }
     }
     if (gen === generation) fetchedAt.value = new Date().toLocaleTimeString();
   } catch (error) { if (gen === generation) pageError.value = showError(error); }
   finally { if (gen === generation) pageLoading.value = false; }
 }
-async function refresh() { if (tab.value === 'query') await Promise.all(panels.value.filter(panel => panel.expression.trim()).map(runPanel)); else await loadPage(); }
+async function loadDiscoveryTargets() {
+  const id = connectionId.value, scrapePools = [...selectedScrapePools.value], gen = ++generation;
+  if (!id || !scrapePools.length) return;
+  pageLoading.value = true; pageError.value = '';
+  try {
+    const response = await invoke<Envelope<{ items?: Target[]; total?: number; page?: number; pageSize?: number; hasNext?: boolean }>>(id, 'prometheus/service_discovery', {
+      form: { scrapePools, state: discoveryState.value, page: discoveryPage.value, pageSize: discoveryPageSize.value },
+    });
+    if (gen === generation) {
+      discoveryTargets.value = response.data.items || [];
+      discoveryTotal.value = response.data.total || 0;
+      discoveryHasNext.value = Boolean(response.data.hasNext);
+      fetchedAt.value = new Date().toLocaleTimeString();
+    }
+  } catch (error) { if (gen === generation) pageError.value = showError(error); }
+  finally { if (gen === generation) pageLoading.value = false; }
+}
+async function refresh() {
+  if (tab.value === 'query') await Promise.all(panels.value.filter(panel => panel.expression.trim()).map(runPanel));
+  else if (tab.value === 'status' && statusView.value === 'discovery' && selectedScrapePools.value.length) await loadDiscoveryTargets();
+  else await loadPage();
+}
 async function connect(context: Context) {
   generation++; connectionId.value = context.connectionId || ''; info.value = undefined;
   completionClient.value = connectionId.value ? new BridgePrometheusClient(connectionId.value) : undefined;
   metrics.value = []; metricPanel.value = ''; metricError.value = '';
+  scrapePools.value = []; discoverySearch.value = ''; selectedScrapePools.value = []; discoveryTargets.value = []; discoveryTotal.value = 0; discoveryPage.value = 1;
   panels.value.forEach(panel => { panel.result = undefined; panel.error = ''; });
   if (!connectionId.value) { pageError.value = ''; return; }
   const id = connectionId.value;
@@ -276,7 +370,38 @@ onBeforeUnmount(() => { generation++; unsubscribe?.(); });
 
         <div v-else-if="statusView === 'config'" class="status-content"><section class="status-section"><div class="section-heading"><h2>Configuration</h2><span>当前 Prometheus 已加载配置，只读</span></div><pre class="config-source"><code>{{ configYaml || 'Prometheus 未返回配置内容' }}</code></pre></section></div>
 
-        <div v-else class="status-content"><div class="list-tools"><label class="search"><Search :size="16" /><input v-model="filter" type="search" placeholder="筛选服务发现目标" aria-label="筛选服务发现目标" /></label><span>{{ targets.length }} 个活动 · {{ droppedTargets.length }} 个已丢弃</span></div><section class="status-section discovery-section"><div class="section-heading"><h2>Active Targets</h2><span>{{ visibleDiscoveryTargets.length }} 项</span></div><div v-for="(item, index) in visibleDiscoveryTargets" :key="`${item.scrapeUrl}-${index}`" class="discovery-row"><div><strong>{{ item.labels?.job || item.scrapePool || '未命名目标' }}</strong><small>{{ item.scrapeUrl || item.labels?.instance || '—' }}</small></div><div><span>最终标签</span><code>{{ labelMap(item.labels) || '—' }}</code></div><div><span>发现标签</span><code>{{ labelMap(item.discoveredLabels) || '—' }}</code></div><span class="badge" :class="item.health === 'up' ? 'ok' : 'bad'">{{ item.health || 'unknown' }}</span></div><div v-if="!visibleDiscoveryTargets.length" class="empty">没有匹配的活动目标</div></section><section class="status-section discovery-section"><div class="section-heading"><h2>Dropped Targets</h2><span>{{ visibleDroppedTargets.length }} 项</span></div><div v-for="(item, index) in visibleDroppedTargets" :key="index" class="discovery-row dropped"><div><strong>{{ item.discoveredLabels?.job || '已丢弃目标' }}</strong><small>{{ item.discoveredLabels?.__address__ || '—' }}</small></div><div><span>发现标签</span><code>{{ labelMap(item.discoveredLabels) || '—' }}</code></div></div><div v-if="!visibleDroppedTargets.length" class="empty">没有匹配的已丢弃目标</div></section></div>
+        <div v-else class="status-content">
+          <div class="discovery-toolbar">
+            <div class="discovery-search-wrap">
+              <label class="search"><Search :size="16" /><input v-model="discoverySearch" type="search" role="combobox" aria-controls="discovery-suggestions" :aria-expanded="discoverySuggestionsOpen && discoverySuggestionItems.length > 0" :aria-activedescendant="discoverySuggestionsOpen && discoverySuggestionItems.length ? `discovery-suggestion-${discoverySuggestionIndex}` : undefined" placeholder="搜索并添加服务" aria-label="搜索并添加服务" @input="handleDiscoveryInput" @focus="discoverySuggestionsOpen = true" @blur="discoverySuggestionsOpen = false" @keydown.down.prevent="moveDiscoverySuggestion(1)" @keydown.up.prevent="moveDiscoverySuggestion(-1)" @keydown.esc="discoverySuggestionsOpen = false" @keydown.enter.prevent="submitDiscoverySearch" /></label>
+              <div v-if="discoverySuggestionsOpen && discoverySuggestionItems.length" id="discovery-suggestions" class="search-suggestions" role="listbox" aria-multiselectable="true">
+                <button v-for="(suggestion, index) in discoverySuggestionItems" :id="`discovery-suggestion-${index}`" :key="suggestion" type="button" role="option" :aria-selected="selectedScrapePools.includes(suggestion)" :class="{ active: index === discoverySuggestionIndex, selected: selectedScrapePools.includes(suggestion) }" @mousedown.prevent @click="toggleDiscoverySuggestion(suggestion)">
+                  <Check v-if="selectedScrapePools.includes(suggestion)" :size="14" /><Server v-else :size="14" />
+                  <span>{{ suggestion }}</span>
+                  <small>{{ selectedScrapePools.includes(suggestion) ? '已选' : index === discoverySuggestionIndex ? 'Enter' : '' }}</small>
+                </button>
+              </div>
+            </div>
+            <div class="discovery-state" aria-label="目标状态"><button type="button" :class="{ selected: discoveryState === 'active' }" @click="setDiscoveryState('active')">活动</button><button type="button" :class="{ selected: discoveryState === 'dropped' }" @click="setDiscoveryState('dropped')">已丢弃</button></div>
+            <label class="page-size">每页<select v-model.number="discoveryPageSize" :disabled="!selectedScrapePools.length" @change="setDiscoveryPageSize"><option :value="20">20</option><option :value="50">50</option><option :value="100">100</option></select>条</label>
+          </div>
+          <div v-if="selectedScrapePools.length" class="selected-services" aria-label="已选服务">
+            <span>已选 {{ selectedScrapePools.length }} 个</span>
+            <button v-for="service in selectedScrapePools" :key="service" type="button" :title="`移除 ${service}`" @click="toggleDiscoverySuggestion(service)"><span>{{ service }}</span><X :size="13" /></button>
+          </div>
+          <div v-if="!selectedScrapePools.length" class="discovery-empty"><Server :size="28" /><strong>请先选择服务</strong><span>可连续选择多个服务，再合并查看目标并分页。</span></div>
+          <section v-else class="status-section discovery-section">
+            <div class="section-heading"><div><h2>{{ discoveryState === 'active' ? '活动目标' : '已丢弃目标' }}</h2><small>已选择 {{ selectedScrapePools.length }} 个服务</small></div><span>{{ discoveryRange.from }}–{{ discoveryRange.to }} / {{ discoveryTotal }} 项</span></div>
+            <div v-for="(item, index) in discoveryTargets" :key="`${item.scrapePool}-${item.scrapeUrl || item.discoveredLabels?.__address__}-${index}`" class="discovery-row" :class="{ dropped: discoveryState === 'dropped' }">
+              <div><strong>{{ item.labels?.job || item.discoveredLabels?.job || item.scrapePool || '未命名目标' }}</strong><span class="target-service">{{ item.scrapePool || '未知服务' }}</span><small>{{ item.scrapeUrl || item.labels?.instance || item.discoveredLabels?.__address__ || '—' }}</small></div>
+              <div v-if="discoveryState === 'active'"><span>最终标签</span><code>{{ labelMap(item.labels) || '—' }}</code></div>
+              <div><span>发现标签</span><code>{{ labelMap(item.discoveredLabels) || '—' }}</code></div>
+              <span v-if="discoveryState === 'active'" class="badge" :class="item.health === 'up' ? 'ok' : 'bad'">{{ item.health || 'unknown' }}</span>
+            </div>
+            <div v-if="!pageLoading && !discoveryTargets.length" class="empty">所选服务没有{{ discoveryState === 'active' ? '活动' : '已丢弃' }}目标</div>
+            <div class="pagination"><button type="button" :disabled="pageLoading || !discoveryRange.canPrevious" @click="moveDiscoveryPage(-1)"><ChevronLeft :size="15" />上一页</button><span>第 {{ discoveryPage }} 页</span><button type="button" :disabled="pageLoading || !discoveryHasNext" @click="moveDiscoveryPage(1)">下一页<ChevronRight :size="15" /></button></div>
+          </section>
+        </div>
       </template>
       <footer><Clock3 :size="13" />只读 Prometheus HTTP API</footer>
       </template>

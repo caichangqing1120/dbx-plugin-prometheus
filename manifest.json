@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "id": "io.github.caichangqing1120.prometheus",
   "name": "Prometheus",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "publisher": "caichangqing1120",
   "description": "Read-only Prometheus query, targets, alerts and rules workbench",
   "icon": "assets/plugin.svg",
