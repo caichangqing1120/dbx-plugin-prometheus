@@ -1,0 +1,9 @@
+node_modules/
+ui/
+dist/
+work/
+output/
+.playwright-cli/
+backend/bin/
+.DS_Store
+.dbx-dev/

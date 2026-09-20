@@ -1,0 +1,11 @@
+{
+  "name": "Prometheus",
+  "description": "Read-only PromQL, targets, alerts and rules in a DBX workbench.",
+  "icon": "assets/plugin.svg",
+  "tags": ["prometheus", "monitoring", "observability"],
+  "permissions": [],
+  "source": "https://github.com/caichangqing1120/dbx-plugin-prometheus",
+  "homepage": "https://github.com/caichangqing1120/dbx-plugin-prometheus",
+  "license": "MIT",
+  "releaseNotes": "Initial read-only Prometheus API workbench."
+}

@@ -1,0 +1,8 @@
+Prometheus DBX Plugin - third-party notices
+
+DBX Go Plugin SDK: Apache License 2.0. Source: github.com/t8y2/dbx/plugins/sdk/go/dbx-plugin-sdk
+Vue: MIT License. Source: github.com/vuejs/core
+Lucide: ISC License. Source: github.com/lucide-icons/lucide
+Go standard library: BSD-style license. Source: go.dev
+
+Corresponding license texts accompany this package. Prometheus is a trademark of The Linux Foundation; this independent plugin is not affiliated with the Prometheus project.
