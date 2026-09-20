@@ -90,7 +90,12 @@ func verify(name string, doHandshake bool) {
 		Entrypoints struct{ Backend struct{ Executable string } }
 	}
 	must(json.Unmarshal(files["manifest.json"], &manifest))
-	require(manifest.ID == "io.github.caichangqing1120.prometheus" && manifest.Version == "0.1.0", "plugin identity mismatch")
+	var expectedManifest struct{ ID, Version string }
+	expectedBytes, err := os.ReadFile("manifest.json")
+	must(err)
+	must(json.Unmarshal(expectedBytes, &expectedManifest))
+	require(expectedManifest.ID == "io.github.caichangqing1120.prometheus", "unexpected source plugin id")
+	require(manifest.ID == expectedManifest.ID && manifest.Version == expectedManifest.Version, "plugin identity mismatch")
 	exe := manifest.Entrypoints.Backend.Executable
 	require(strings.HasPrefix(exe, "bin/"+metadata.Target+"/"), "target and executable path mismatch")
 	require(len(files) == 11, "unexpected package entries")
@@ -133,11 +138,11 @@ func verify(name string, doHandshake bool) {
 	}
 	fmt.Printf("PASS %s: architecture, entrypoint, exact archive entries, SHA256 and metadata\n", metadata.Target)
 	if doHandshake {
-		handshake(binary)
+		handshake(binary, expectedManifest.ID, expectedManifest.Version)
 	}
 }
 
-func handshake(binary []byte) {
+func handshake(binary []byte, expectedID, expectedVersion string) {
 	dir, err := os.MkdirTemp("", "prometheus-handshake-")
 	must(err)
 	defer os.RemoveAll(dir)
@@ -156,6 +161,6 @@ func handshake(binary []byte) {
 		}
 	}
 	must(json.Unmarshal(bytes.TrimSpace(output), &reply))
-	require(reply.Result.ProtocolVersion == 1 && reply.Result.Plugin.ID == "io.github.caichangqing1120.prometheus" && reply.Result.Plugin.Version == "0.1.0", "package handshake mismatch")
+	require(reply.Result.ProtocolVersion == 1 && reply.Result.Plugin.ID == expectedID && reply.Result.Plugin.Version == expectedVersion, "package handshake mismatch")
 	fmt.Println("PASS packaged binary: plugin/initialize identity, version and protocol 1")
 }

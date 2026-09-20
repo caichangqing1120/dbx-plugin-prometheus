@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,10 +42,13 @@ type runtimeEndpoint struct {
 	Port int    `json:"port"`
 }
 type queryForm struct {
-	Query string  `json:"query"`
-	Start float64 `json:"start"`
-	End   float64 `json:"end"`
-	Step  float64 `json:"step"`
+	Query      string  `json:"query"`
+	MetricName string  `json:"metricName"`
+	LabelName  string  `json:"labelName"`
+	Time       float64 `json:"time"`
+	Start      float64 `json:"start"`
+	End        float64 `json:"end"`
+	Step       float64 `json:"step"`
 }
 type session struct {
 	mu          sync.RWMutex
@@ -57,6 +61,9 @@ type session struct {
 	client      *http.Client
 	transport   *http.Transport
 }
+
+var metricNamePattern = regexp.MustCompile(`^[a-zA-Z_:][a-zA-Z0-9_:]*$`)
+var labelNamePattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 func newSession(c connection, runtime runtimeEndpoint) (*session, error) {
 	scheme := c.Config.Scheme
@@ -144,6 +151,39 @@ func (s *session) execute(method string, form queryForm) (any, error) {
 		return s.call("/api/v1/alerts", nil)
 	case "prometheus/rules":
 		return s.call("/api/v1/rules", nil)
+	case "prometheus/status_runtime":
+		return s.call("/api/v1/status/runtimeinfo", nil)
+	case "prometheus/status_tsdb":
+		return s.call("/api/v1/status/tsdb", url.Values{"limit": {"10"}})
+	case "prometheus/status_flags":
+		return s.call("/api/v1/status/flags", nil)
+	case "prometheus/status_config":
+		return s.call("/api/v1/status/config", nil)
+	case "prometheus/service_discovery":
+		return s.call("/api/v1/targets", url.Values{"state": {"any"}})
+	case "prometheus/metric_names":
+		return s.call("/api/v1/label/__name__/values", nil)
+	case "prometheus/label_names":
+		values := url.Values{}
+		if form.MetricName != "" {
+			if !metricNamePattern.MatchString(form.MetricName) {
+				return nil, errors.New("指标名称无效")
+			}
+			values.Set("match[]", form.MetricName)
+		}
+		return s.call("/api/v1/labels", values)
+	case "prometheus/label_values":
+		if !labelNamePattern.MatchString(form.LabelName) {
+			return nil, errors.New("标签名称无效")
+		}
+		values := url.Values{}
+		if form.MetricName != "" {
+			if !metricNamePattern.MatchString(form.MetricName) {
+				return nil, errors.New("指标名称无效")
+			}
+			values.Set("match[]", form.MetricName)
+		}
+		return s.call("/api/v1/label/"+url.PathEscape(form.LabelName)+"/values", values)
 	case "prometheus/query", "prometheus/query_range":
 		q := strings.TrimSpace(form.Query)
 		if q == "" || len(q) > 4096 {
@@ -151,6 +191,12 @@ func (s *session) execute(method string, form queryForm) (any, error) {
 		}
 		v := url.Values{"query": {q}}
 		if method == "prometheus/query" {
+			if form.Time != 0 {
+				if !finite(form.Time) || form.Time <= 0 || form.Time > float64(time.Now().Add(time.Minute).Unix()) {
+					return nil, errors.New("评估时间无效")
+				}
+				v.Set("time", strconv.FormatFloat(form.Time, 'f', -1, 64))
+			}
 			return s.call("/api/v1/query", v)
 		}
 		if !finite(form.Start) || !finite(form.End) || !finite(form.Step) || form.Start <= 0 || form.End <= form.Start || form.End > float64(time.Now().Add(time.Minute).Unix()) || form.Step <= 0 || form.Step < 1 || (form.End-form.Start)/form.Step > 11000 {

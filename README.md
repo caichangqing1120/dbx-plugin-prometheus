@@ -8,11 +8,21 @@ Requires DBX 0.6.14+ and Host API 1. Enter the host, port, HTTP/HTTPS scheme and
 
 The connection check reads `/api/v1/status/buildinfo`. The workbench offers:
 
+- Multiple independent PromQL panels with Table/Graph modes, per-panel execution and removable panels.
+- A PromQL editor with syntax highlighting, Prometheus-backed metric/label/value completion, lint diagnostics and `Shift+Enter` execution.
+- A searchable metric explorer that inserts the selected metric into the active query panel.
+- Evaluation-time navigation, configurable graph range/step, local-time or UTC display and persisted query history.
+- Light, system and dark themes.
 - Instant and range PromQL queries; ranges are limited to 11,000 points, responses to 4 MiB and displayed series to 100.
 - Active scrape targets, health and last errors (`/api/v1/targets`).
 - Active alerts (`/api/v1/alerts`) and recording/alerting rule groups (`/api/v1/rules`).
+- Runtime/build information, TSDB cardinality, command-line flags, loaded configuration and service discovery status (`/api/v1/status/*`, `/api/v1/targets?state=any`).
 
 All requests use GET and fixed endpoint paths; redirects are rejected. A query is executed against the configured Prometheus server, so restrict connection access and query size as appropriate to your environment. There are no native listeners, child processes or persistent plugin files.
+
+## Local preview
+
+Run `npm run dev` and open `/preview.html` on the displayed local URL to inspect the four workbench views with synthetic data. The preview is explicitly labeled and does not contact a Prometheus server. Its mock bridge is not included in the packaged `ui/index.html`; the normal entrypoint still requires DBX.
 
 ## Build
 
@@ -25,10 +35,10 @@ npm run build
 go -C backend test -race ./...
 go -C backend vet ./...
 npm run package:all
-go run scripts/verify-package.go dist/io.github.caichangqing1120.prometheus-0.1.0-darwin-arm64.dbxp --handshake
+go run scripts/verify-package.go dist/io.github.caichangqing1120.prometheus-0.1.4-darwin-arm64.dbxp --handshake
 ```
 
-The packaging script produces six unsigned macOS, Windows and Linux ARM64/x64 candidates, checksums, per-target metadata and `dist/release-candidates.json`. Cross-built packages are checked for architecture and checksum but have not been run in DBX on each OS. Backend tests use an `httptest` fixture, and UI checks use synthetic data; no live Prometheus deployment has been accepted.
+The packaging script produces six unsigned macOS, Windows and Linux ARM64/x64 candidates, checksums, per-target metadata and `dist/release-candidates.json`. Cross-built packages are checked for architecture and checksum but have not been run in DBX on each OS. The macOS ARM64 `0.1.4` package was installed in DBX and exercised against Prometheus `2.47.2` for PromQL, targets and status endpoints; backend tests also use an `httptest` fixture and UI checks use synthetic data.
 
 ## Marketplace
 

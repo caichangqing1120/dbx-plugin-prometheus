@@ -6,6 +6,16 @@ export type Target = { scrapePool?: string; health?: string; labels?: Record<str
 export type Alert = { labels?: Record<string, string>; annotations?: Record<string, string>; state?: string; activeAt?: string; value?: string };
 export type Rule = { name?: string; type?: string; query?: string; state?: string; health?: string; lastError?: string; alerts?: Alert[] };
 export type RuleGroup = { name?: string; file?: string; rules?: Rule[] };
+export type BuildInfo = { branch?: string; buildDate?: string; buildUser?: string; goVersion?: string; revision?: string; version?: string };
+export type RuntimeInfo = Record<string, string | number | boolean | null>;
+export type StatusEntry = { name: string; value: number };
+export type TSDBStatus = {
+  headStats?: { numSeries?: number; numLabelPairs?: number; chunkCount?: number; minTime?: number; maxTime?: number };
+  seriesCountByMetricName?: StatusEntry[];
+  labelValueCountByLabelName?: StatusEntry[];
+  memoryInBytesByLabelName?: StatusEntry[];
+  seriesCountByLabelValuePair?: StatusEntry[];
+};
 export const seriesName = (metric: Record<string, string>): string => {
   const { __name__, ...labels } = metric;
   const parts = Object.entries(labels).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => `${key}="${value}"`);

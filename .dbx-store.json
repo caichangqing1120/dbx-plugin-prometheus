@@ -1,11 +1,11 @@
 {
   "name": "Prometheus",
-  "description": "Read-only PromQL, targets, alerts and rules in a DBX workbench.",
+  "description": "Read-only PromQL editor, targets, alerts, rules and runtime status in a DBX workbench.",
   "icon": "assets/plugin.svg",
   "tags": ["prometheus", "monitoring", "observability"],
   "permissions": [],
   "source": "https://github.com/caichangqing1120/dbx-plugin-prometheus",
   "homepage": "https://github.com/caichangqing1120/dbx-plugin-prometheus",
   "license": "MIT",
-  "releaseNotes": "Initial read-only Prometheus API workbench."
+  "releaseNotes": "Add a full read-only Prometheus workbench with PromQL highlighting and server-backed completion, multi-panel table and graph queries, metric exploration, query history, targets, alerts, rules, runtime/build details, TSDB cardinality, flags, configuration and service discovery status."
 }

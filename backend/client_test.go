@@ -108,6 +108,120 @@ func TestRangeBoundsAndEncoding(t *testing.T) {
 	}
 }
 
+func TestInstantQueryEvaluationTime(t *testing.T) {
+	evaluation := float64(time.Now().Add(-5 * time.Minute).Unix())
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/prom/api/v1/query" && r.URL.Query().Get("time") != strconv.FormatFloat(evaluation, 'f', -1, 64) {
+			t.Errorf("missing evaluation time: %s", r.URL)
+		}
+		fmt.Fprint(w, `{"status":"success","data":{"resultType":"vector","result":[]}}`)
+	}))
+	defer server.Close()
+	p := newPlugin()
+	invoke(p, "connection/connect", testConnection(t, server, nil))
+	if _, err := invoke(p, "prometheus/query", map[string]any{"connectionId": "demo", "form": map[string]any{"query": "up", "time": evaluation}}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCompletionRoutesAndValidation(t *testing.T) {
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		switch r.URL.Path {
+		case "/prom/api/v1/label/__name__/values":
+			fmt.Fprint(w, `{"status":"success","data":["up","node_cpu_seconds_total"]}`)
+		case "/prom/api/v1/labels":
+			if r.URL.Query().Get("match[]") != "node_cpu_seconds_total" {
+				t.Errorf("missing metric matcher: %s", r.URL.RawQuery)
+			}
+			fmt.Fprint(w, `{"status":"success","data":["instance","job","mode"]}`)
+		case "/prom/api/v1/label/mode/values":
+			if r.URL.Query().Get("match[]") != "node_cpu_seconds_total" {
+				t.Errorf("missing label value matcher: %s", r.URL.RawQuery)
+			}
+			fmt.Fprint(w, `{"status":"success","data":["idle","system","user"]}`)
+		default:
+			fmt.Fprint(w, `{"status":"success","data":{}}`)
+		}
+	}))
+	defer server.Close()
+	p := newPlugin()
+	if _, err := invoke(p, "connection/connect", testConnection(t, server, nil)); err != nil {
+		t.Fatal(err)
+	}
+	for _, call := range []struct {
+		method string
+		form   map[string]any
+	}{
+		{"prometheus/metric_names", nil},
+		{"prometheus/label_names", map[string]any{"metricName": "node_cpu_seconds_total"}},
+		{"prometheus/label_values", map[string]any{"metricName": "node_cpu_seconds_total", "labelName": "mode"}},
+	} {
+		if _, err := invoke(p, call.method, map[string]any{"connectionId": "demo", "form": call.form}); err != nil {
+			t.Fatalf("%s: %v", call.method, err)
+		}
+	}
+	if requests != 4 {
+		t.Fatalf("unexpected request count: %d", requests)
+	}
+	for _, call := range []struct {
+		method string
+		form   map[string]any
+	}{
+		{"prometheus/label_names", map[string]any{"metricName": "bad metric"}},
+		{"prometheus/label_values", map[string]any{"labelName": "../secret"}},
+	} {
+		if _, err := invoke(p, call.method, map[string]any{"connectionId": "demo", "form": call.form}); err == nil {
+			t.Fatalf("invalid completion input accepted: %#v", call)
+		}
+	}
+	if requests != 4 {
+		t.Fatalf("invalid completion input reached API: %d", requests)
+	}
+}
+
+func TestStatusRoutes(t *testing.T) {
+	seen := map[string]string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen[r.URL.Path] = r.URL.RawQuery
+		fmt.Fprint(w, `{"status":"success","data":{}}`)
+	}))
+	defer server.Close()
+	p := newPlugin()
+	if _, err := invoke(p, "connection/connect", testConnection(t, server, nil)); err != nil {
+		t.Fatal(err)
+	}
+	for _, method := range []string{
+		"prometheus/status_runtime",
+		"prometheus/status_tsdb",
+		"prometheus/status_flags",
+		"prometheus/status_config",
+		"prometheus/service_discovery",
+	} {
+		if _, err := invoke(p, method, map[string]any{"connectionId": "demo"}); err != nil {
+			t.Fatalf("%s: %v", method, err)
+		}
+	}
+	for _, path := range []string{
+		"/prom/api/v1/status/runtimeinfo",
+		"/prom/api/v1/status/tsdb",
+		"/prom/api/v1/status/flags",
+		"/prom/api/v1/status/config",
+		"/prom/api/v1/targets",
+	} {
+		if _, ok := seen[path]; !ok {
+			t.Fatalf("status route not requested: %s", path)
+		}
+	}
+	if seen["/prom/api/v1/status/tsdb"] != "limit=10" {
+		t.Fatalf("unexpected TSDB query: %s", seen["/prom/api/v1/status/tsdb"])
+	}
+	if seen["/prom/api/v1/targets"] != "state=any" {
+		t.Fatalf("unexpected discovery query: %s", seen["/prom/api/v1/targets"])
+	}
+}
+
 func TestRejectBadConnectionAndRedirect(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "http://example.com", http.StatusFound)
