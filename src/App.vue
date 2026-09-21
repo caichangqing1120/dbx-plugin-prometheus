@@ -7,6 +7,7 @@ import {
 import prometheusLogo from '../assets/plugin.svg?inline';
 import { invoke, waitForPluginReady, type Context } from './bridge';
 import PromQLEditor from './PromQLEditor.vue';
+import FilterSelect from './FilterSelect.vue';
 import { numericValue, plot, seriesName, type Alert, type BuildInfo, type Envelope, type QueryResult, type RuleGroup, type RuntimeInfo, type Series, type StatusEntry, type Target, type TSDBStatus } from './domain';
 import { BridgePrometheusClient } from './prometheus-client';
 import { browserStorage, readStorage, writeStorage } from './storage';
@@ -15,9 +16,15 @@ import {
   connectionExperience,
   createPanel,
   discoveryPageRange,
+  alertFilterOptions,
+  filterAlertsByOption,
+  filterRuleGroupsByOption,
   filterScrapePools,
+  filterTargetsByOption,
   queryWindow,
+  ruleFilterOptions,
   shiftEvaluationTime,
+  targetFilterOptions,
   toggleScrapePool,
   type QueryPanel,
 } from './workbench';
@@ -47,7 +54,8 @@ const panels = ref<QueryPanel[]>([createPanel('panel-1', 'up')]);
 const targets = ref<Target[]>([]), alerts = ref<Alert[]>([]), groups = ref<RuleGroup[]>([]);
 const statusView = ref<StatusView>('runtime'), runtimeInfo = ref<RuntimeInfo>({}), tsdbStatus = ref<TSDBStatus>({});
 const flags = ref<Record<string, string>>({}), configYaml = ref('');
-const filter = ref(''), pageLoading = ref(false), pageError = ref(''), fetchedAt = ref('');
+const targetFilter = ref(''), alertFilter = ref(''), ruleFilter = ref(''), statusFilter = ref('');
+const pageLoading = ref(false), pageError = ref(''), fetchedAt = ref('');
 const localTime = ref(true), historyEnabled = ref(true), autocomplete = ref(true), highlighting = ref(true), linter = ref(true);
 const history = ref<string[]>([]), historyPanel = ref('');
 const completionClient = shallowRef<BridgePrometheusClient>();
@@ -61,11 +69,14 @@ const theme = ref<Theme>('system'), systemDark = ref(false);
 let generation = 0, panelSequence = 1, unsubscribe: (() => void) | undefined, media: MediaQueryList | undefined;
 
 const currentTitle = computed(() => tabs.find(item => item.id === tab.value)?.title);
-const visibleTargets = computed(() => targets.value.filter(item => `${item.scrapePool} ${item.labels?.instance} ${item.scrapeUrl}`.toLowerCase().includes(filter.value.toLowerCase())));
-const visibleAlerts = computed(() => alerts.value.filter(item => `${item.labels?.alertname} ${item.labels?.severity} ${item.annotations?.summary}`.toLowerCase().includes(filter.value.toLowerCase())));
-const visibleGroups = computed(() => groups.value.filter(item => `${item.name} ${item.file} ${item.rules?.map(rule => rule.name).join(' ')}`.toLowerCase().includes(filter.value.toLowerCase())));
+const targetOptions = computed(() => targetFilterOptions(targets.value));
+const alertOptions = computed(() => alertFilterOptions(alerts.value));
+const ruleOptions = computed(() => ruleFilterOptions(groups.value));
+const visibleTargets = computed(() => filterTargetsByOption(targets.value, targetFilter.value));
+const visibleAlerts = computed(() => filterAlertsByOption(alerts.value, alertFilter.value));
+const visibleGroups = computed(() => filterRuleGroupsByOption(groups.value, ruleFilter.value));
 const healthy = computed(() => targets.value.filter(item => item.health === 'up').length);
-const visibleFlags = computed(() => Object.entries(flags.value).filter(([key, value]) => `${key} ${value}`.toLowerCase().includes(filter.value.toLowerCase())));
+const visibleFlags = computed(() => Object.entries(flags.value).filter(([key, value]) => `${key} ${value}`.toLowerCase().includes(statusFilter.value.toLowerCase())));
 const discoverySuggestionItems = computed(() => filterScrapePools(scrapePools.value, discoverySearch.value));
 const discoveryRange = computed(() => discoveryPageRange(discoveryPage.value, discoveryPageSize.value, discoveryTotal.value));
 const tsdbTables = computed<Array<{ title: string; items: StatusEntry[]; bytes?: boolean }>>(() => [
@@ -195,8 +206,8 @@ function shiftEvaluation(minutes: number) {
   clearPanelResults();
 }
 function useNow() { evaluationTime.value = new Date(); clearPanelResults(); }
-function select(next: Tab) { if (tab.value === next) return; tab.value = next; filter.value = ''; historyPanel.value = ''; if (next !== 'query') loadPage(); }
-function selectStatus(next: StatusView) { if (statusView.value === next) return; statusView.value = next; filter.value = ''; loadPage(); }
+function select(next: Tab) { if (tab.value === next) return; tab.value = next; historyPanel.value = ''; if (next !== 'query') loadPage(); }
+function selectStatus(next: StatusView) { if (statusView.value === next) return; statusView.value = next; statusFilter.value = ''; loadPage(); }
 
 async function runPanel(panel: QueryPanel) {
   const id = connectionId.value;
@@ -220,13 +231,22 @@ async function loadPage() {
   try {
     if (tab.value === 'targets') {
       const response = await invoke<Envelope<{ activeTargets?: Target[] }>>(id, 'prometheus/targets');
-      if (gen === generation) targets.value = response.data.activeTargets || [];
+      if (gen === generation) {
+        targets.value = response.data.activeTargets || [];
+        if (!targetFilterOptions(targets.value).some(item => item.value === targetFilter.value)) targetFilter.value = '';
+      }
     } else if (tab.value === 'alerts') {
       const response = await invoke<Envelope<{ alerts?: Alert[] }>>(id, 'prometheus/alerts');
-      if (gen === generation) alerts.value = response.data.alerts || [];
+      if (gen === generation) {
+        alerts.value = response.data.alerts || [];
+        if (!alertFilterOptions(alerts.value).some(item => item.value === alertFilter.value)) alertFilter.value = '';
+      }
     } else if (tab.value === 'rules') {
       const response = await invoke<Envelope<{ groups?: RuleGroup[] }>>(id, 'prometheus/rules');
-      if (gen === generation) groups.value = response.data.groups || [];
+      if (gen === generation) {
+        groups.value = response.data.groups || [];
+        if (!ruleFilterOptions(groups.value).some(item => item.value === ruleFilter.value)) ruleFilter.value = '';
+      }
     } else if (tab.value === 'status') {
       if (statusView.value === 'runtime') {
         const response = await invoke<Envelope<RuntimeInfo>>(id, 'prometheus/status_runtime');
@@ -283,6 +303,7 @@ async function connect(context: Context) {
   generation++; connectionId.value = context.connectionId || ''; info.value = undefined;
   completionClient.value = connectionId.value ? new BridgePrometheusClient(connectionId.value) : undefined;
   metrics.value = []; metricPanel.value = ''; metricError.value = '';
+  targets.value = []; alerts.value = []; groups.value = []; targetFilter.value = ''; alertFilter.value = ''; ruleFilter.value = ''; statusFilter.value = '';
   scrapePools.value = []; discoverySearch.value = ''; selectedScrapePools.value = []; discoveryTargets.value = []; discoveryTotal.value = 0; discoveryPage.value = 1;
   panels.value.forEach(panel => { panel.result = undefined; panel.error = ''; });
   if (!connectionId.value) { pageError.value = ''; return; }
@@ -347,7 +368,7 @@ onBeforeUnmount(() => { generation++; unsubscribe?.(); });
         <button class="add-panel" type="button" @click="addPanel"><Plus :size="17" />新增面板</button>
       </template>
 
-      <template v-else-if="tab !== 'status'"><div class="list-tools"><label class="search"><Search :size="16" /><input v-model="filter" type="search" :placeholder="`筛选${currentTitle}`" :aria-label="`筛选${currentTitle}`" /></label><span v-if="tab === 'targets'">{{ healthy }} / {{ targets.length }} 正常</span><span v-else-if="tab === 'alerts'">{{ alerts.length }} 条活动告警</span><span v-else>{{ groups.length }} 个规则组</span></div>
+      <template v-else-if="tab !== 'status'"><div class="list-tools"><FilterSelect v-if="tab === 'targets'" v-model="targetFilter" :options="targetOptions" placeholder="采集目标" all-label="全部采集目标" /><FilterSelect v-else-if="tab === 'alerts'" v-model="alertFilter" :options="alertOptions" placeholder="活动告警" all-label="全部活动告警" /><FilterSelect v-else v-model="ruleFilter" :options="ruleOptions" placeholder="规则" all-label="全部规则" /><span v-if="tab === 'targets'">{{ healthy }} / {{ targets.length }} 正常</span><span v-else-if="tab === 'alerts'">{{ alerts.length }} 条活动告警</span><span v-else>{{ groups.length }} 个规则组</span></div>
         <div v-if="tab === 'targets'" class="table-wrap responsive-table"><table><thead><tr><th>目标 / 任务</th><th>状态</th><th>最近采集</th><th>错误</th></tr></thead><tbody><tr v-for="(item, index) in visibleTargets" :key="index"><td data-label="目标 / 任务"><strong>{{ item.labels?.instance || item.scrapeUrl || '—' }}</strong><small>{{ item.scrapePool }} · {{ labelMap(item.labels) }}</small></td><td data-label="状态"><span class="badge" :class="item.health === 'up' ? 'ok' : 'bad'">{{ item.health || 'unknown' }}</span></td><td data-label="最近采集">{{ formatDate(item.lastScrape) }}</td><td data-label="错误" class="error-text">{{ item.lastError || '—' }}</td></tr><tr v-if="!visibleTargets.length"><td colspan="4" class="empty">{{ pageLoading ? '加载中…' : '没有匹配的采集目标' }}</td></tr></tbody></table></div>
         <div v-if="tab === 'alerts'" class="table-wrap responsive-table"><table><thead><tr><th>告警</th><th>状态</th><th>开始时间</th><th>值</th></tr></thead><tbody><tr v-for="(item, index) in visibleAlerts" :key="index"><td data-label="告警"><strong>{{ item.labels?.alertname || '未命名告警' }}</strong><small>{{ item.annotations?.summary || labelMap(item.labels) }}</small></td><td data-label="状态"><span class="badge" :class="item.state === 'firing' ? 'bad' : 'pending'">{{ item.state || 'unknown' }}</span></td><td data-label="开始时间">{{ formatDate(item.activeAt) }}</td><td data-label="值">{{ item.value || '—' }}</td></tr><tr v-if="!visibleAlerts.length"><td colspan="4" class="empty">{{ pageLoading ? '加载中…' : '没有活动告警' }}</td></tr></tbody></table></div>
         <div v-if="tab === 'rules'" class="rule-list"><section v-for="(group, index) in visibleGroups" :key="index" class="rule-group"><div class="group-head"><h2>{{ group.name || '未命名规则组' }}</h2><small>{{ group.file || '' }}</small></div><div v-for="(rule, ruleIndex) in group.rules || []" :key="ruleIndex" class="rule"><div><strong>{{ rule.name || '未命名规则' }}</strong><code>{{ rule.query || '' }}</code><small v-if="rule.lastError" class="error-text">{{ rule.lastError }}</small></div><span class="badge" :class="rule.health === 'ok' ? 'ok' : 'bad'">{{ rule.health || rule.state || rule.type || '—' }}</span></div></section><div v-if="!visibleGroups.length" class="empty">{{ pageLoading ? '加载中…' : '没有匹配的规则组' }}</div></div>
@@ -366,7 +387,7 @@ onBeforeUnmount(() => { generation++; unsubscribe?.(); });
           <section class="status-section"><div class="section-heading"><h2>Head Cardinality Stats</h2><span>Prometheus 返回的前 10 项</span></div><div class="status-table-grid"><div v-for="table in tsdbTables" :key="table.title" class="compact-table"><h3>{{ table.title }}</h3><table><thead><tr><th>名称</th><th>值</th></tr></thead><tbody><tr v-for="item in table.items" :key="item.name"><td><code>{{ item.name }}</code></td><td>{{ table.bytes ? formatBytes(item.value) : item.value }}</td></tr><tr v-if="!table.items.length"><td colspan="2" class="empty compact">暂无数据</td></tr></tbody></table></div></div></section>
         </div>
 
-        <div v-else-if="statusView === 'flags'" class="status-content"><div class="list-tools"><label class="search"><Search :size="16" /><input v-model="filter" type="search" placeholder="筛选启动参数" aria-label="筛选启动参数" /></label><span>{{ visibleFlags.length }} 项</span></div><div class="table-wrap"><table><thead><tr><th>参数</th><th>值</th></tr></thead><tbody><tr v-for="([key, value]) in visibleFlags" :key="key"><td><code>--{{ key }}</code></td><td>{{ value }}</td></tr><tr v-if="!visibleFlags.length"><td colspan="2" class="empty">没有匹配的启动参数</td></tr></tbody></table></div></div>
+        <div v-else-if="statusView === 'flags'" class="status-content"><div class="list-tools"><label class="search"><Search :size="16" /><input v-model="statusFilter" type="search" placeholder="筛选启动参数" aria-label="筛选启动参数" /></label><span>{{ visibleFlags.length }} 项</span></div><div class="table-wrap"><table><thead><tr><th>参数</th><th>值</th></tr></thead><tbody><tr v-for="([key, value]) in visibleFlags" :key="key"><td><code>--{{ key }}</code></td><td>{{ value }}</td></tr><tr v-if="!visibleFlags.length"><td colspan="2" class="empty">没有匹配的启动参数</td></tr></tbody></table></div></div>
 
         <div v-else-if="statusView === 'config'" class="status-content"><section class="status-section"><div class="section-heading"><h2>Configuration</h2><span>当前 Prometheus 已加载配置，只读</span></div><pre class="config-source"><code>{{ configYaml || 'Prometheus 未返回配置内容' }}</code></pre></section></div>
 

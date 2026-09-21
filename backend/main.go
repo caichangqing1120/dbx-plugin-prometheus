@@ -10,7 +10,7 @@ import (
 )
 
 const pluginID = "io.github.caichangqing1120.prometheus"
-const version = "0.1.6"
+const version = "0.1.7"
 
 type request struct {
 	Connection   connection      `json:"connection"`

@@ -1,14 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   addHistoryEntry,
+  alertFilterOptions,
   connectionExperience,
   createPanel,
   discoveryPageRange,
+  filterAlertsByOption,
+  filterRuleGroupsByOption,
   filterScrapePools,
+  filterTargetsByOption,
   queryWindow,
+  ruleFilterOptions,
   shiftEvaluationTime,
+  targetFilterOptions,
   toggleScrapePool,
 } from './workbench';
+import type { Alert, RuleGroup, Target } from './domain';
 
 describe('PromQL workbench state', () => {
   it('creates independent query panels with stable defaults', () => {
@@ -51,5 +58,45 @@ describe('PromQL workbench state', () => {
     expect(discoveryPageRange(2, 20, 45)).toEqual({ from: 21, to: 40, canPrevious: true, canNext: true });
     expect(discoveryPageRange(3, 20, 45)).toEqual({ from: 41, to: 45, canPrevious: true, canNext: false });
     expect(discoveryPageRange(1, 20, 0)).toEqual({ from: 0, to: 0, canPrevious: false, canNext: false });
+  });
+
+  it('builds exact selectable options for scrape targets', () => {
+    const items: Target[] = [
+      { scrapePool: 'node', labels: { instance: 'node-a:9100', job: 'node' }, health: 'up' },
+      { scrapePool: 'node', labels: { instance: 'node-a:9100', job: 'node' }, health: 'up' },
+      { scrapePool: 'pods', scrapeUrl: 'http://10.0.0.2:9253/metrics', health: 'down' },
+    ];
+    const options = targetFilterOptions(items);
+    expect(options.map(item => ({ label: item.label, description: item.description }))).toEqual([
+      { label: 'node-a:9100', description: 'node · up' },
+      { label: 'http://10.0.0.2:9253/metrics', description: 'pods · down' },
+    ]);
+    expect(filterTargetsByOption(items, options[1].value)).toEqual([items[2]]);
+    expect(filterTargetsByOption(items, '')).toEqual(items);
+  });
+
+  it('offers alert targets without requiring a typed keyword', () => {
+    const items: Alert[] = [
+      { labels: { alertname: 'InstanceDown', instance: 'node-b:9100' }, state: 'firing', activeAt: '2026-09-21T04:00:00Z' },
+      { labels: { alertname: 'HighCPU' }, state: 'pending', activeAt: '2026-09-21T04:01:00Z' },
+    ];
+    const options = alertFilterOptions(items);
+    expect(options.map(item => item.label)).toEqual(['InstanceDown · node-b:9100', 'HighCPU']);
+    expect(filterAlertsByOption(items, options[0].value)).toEqual([items[0]]);
+  });
+
+  it('filters a selected rule without showing unrelated rules in its group', () => {
+    const items: RuleGroup[] = [{
+      name: 'node.rules',
+      file: 'rules/node.yml',
+      rules: [
+        { name: 'InstanceDown', type: 'alerting', health: 'ok' },
+        { name: 'NodeCPU', type: 'recording', health: 'ok' },
+      ],
+    }];
+    const options = ruleFilterOptions(items);
+    expect(options.map(item => item.label)).toEqual(['InstanceDown', 'NodeCPU']);
+    expect(filterRuleGroupsByOption(items, options[1].value)).toEqual([{ ...items[0], rules: [items[0].rules![1]] }]);
+    expect(filterRuleGroupsByOption(items, '')).toEqual(items);
   });
 });

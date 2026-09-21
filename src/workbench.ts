@@ -1,4 +1,4 @@
-import type { QueryResult } from './domain';
+import type { Alert, QueryResult, Rule, RuleGroup, Target } from './domain';
 
 export type PanelView = 'table' | 'graph';
 export type QueryPanel = {
@@ -15,6 +15,13 @@ export type ConnectionExperience = {
   connected: boolean;
   title: string;
   description: string;
+};
+
+export type FilterOption = {
+  value: string;
+  label: string;
+  description?: string;
+  searchText?: string;
 };
 
 export function connectionExperience(connectionId: string): ConnectionExperience {
@@ -68,4 +75,74 @@ export function discoveryPageRange(page: number, pageSize: number, total: number
     canPrevious: page > 1,
     canNext: page * pageSize < total,
   };
+}
+
+function compact(parts: Array<string | undefined>): string[] {
+  return parts.map(item => item?.trim()).filter((item): item is string => Boolean(item));
+}
+
+function distinctOptions(options: FilterOption[]): FilterOption[] {
+  return options.filter((option, index) => options.findIndex(item => item.value === option.value) === index);
+}
+
+function targetOptionValue(target: Target): string {
+  return JSON.stringify(compact([target.scrapePool, target.labels?.instance, target.scrapeUrl]));
+}
+
+export function targetFilterOptions(targets: Target[]): FilterOption[] {
+  return distinctOptions(targets.map(target => {
+    const label = target.labels?.instance || target.scrapeUrl || target.scrapePool || '未命名目标';
+    return {
+      value: targetOptionValue(target),
+      label,
+      description: compact([target.scrapePool, target.health]).join(' · '),
+      searchText: compact([label, target.scrapePool, target.labels?.job, target.scrapeUrl, target.health]).join(' '),
+    };
+  }));
+}
+
+export function filterTargetsByOption(targets: Target[], selected: string): Target[] {
+  return selected ? targets.filter(target => targetOptionValue(target) === selected) : targets;
+}
+
+function alertOptionValue(alert: Alert): string {
+  return JSON.stringify(compact([alert.labels?.alertname, alert.labels?.instance, alert.state, alert.activeAt]));
+}
+
+export function alertFilterOptions(alerts: Alert[]): FilterOption[] {
+  return distinctOptions(alerts.map(alert => {
+    const name = alert.labels?.alertname || '未命名告警';
+    const instance = alert.labels?.instance;
+    return {
+      value: alertOptionValue(alert),
+      label: compact([name, instance]).join(' · '),
+      description: compact([alert.labels?.severity, alert.state]).join(' · '),
+      searchText: compact([name, instance, alert.labels?.severity, alert.state, alert.annotations?.summary]).join(' '),
+    };
+  }));
+}
+
+export function filterAlertsByOption(alerts: Alert[], selected: string): Alert[] {
+  return selected ? alerts.filter(alert => alertOptionValue(alert) === selected) : alerts;
+}
+
+function ruleOptionValue(group: RuleGroup, rule: Rule): string {
+  return JSON.stringify(compact([group.name, group.file, rule.name, rule.type, rule.query]));
+}
+
+export function ruleFilterOptions(groups: RuleGroup[]): FilterOption[] {
+  return distinctOptions(groups.flatMap(group => (group.rules || []).map(rule => ({
+    value: ruleOptionValue(group, rule),
+    label: rule.name || '未命名规则',
+    description: compact([group.name, rule.type, rule.health || rule.state]).join(' · '),
+    searchText: compact([rule.name, group.name, group.file, rule.type, rule.query]).join(' '),
+  }))));
+}
+
+export function filterRuleGroupsByOption(groups: RuleGroup[], selected: string): RuleGroup[] {
+  if (!selected) return groups;
+  return groups.flatMap(group => {
+    const rules = (group.rules || []).filter(rule => ruleOptionValue(group, rule) === selected);
+    return rules.length ? [{ ...group, rules }] : [];
+  });
 }

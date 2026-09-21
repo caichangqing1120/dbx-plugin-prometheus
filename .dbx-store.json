@@ -7,5 +7,5 @@
   "source": "https://github.com/caichangqing1120/dbx-plugin-prometheus",
   "homepage": "https://github.com/caichangqing1120/dbx-plugin-prometheus",
   "license": "MIT",
-  "releaseNotes": "Add multi-select service discovery browsing. Search only follows the typed keyword, selected services remain independently visible and removable, and targets from up to 20 services are streamed, merged and paginated across active or dropped states."
+  "releaseNotes": "优化采集目标、活动告警和规则筛选体验：新增可搜索下拉候选，支持鼠标与键盘选择具体项，并修复选择具体项后无法切回全部、规则候选无法点击的问题。候选列表最多展示 200 项，便于在大型 Prometheus 实例中快速定位。"
 }

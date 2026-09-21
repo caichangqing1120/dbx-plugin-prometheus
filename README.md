@@ -1,33 +1,61 @@
 # Prometheus for DBX
 
-An independent, read-only DBX workbench for the Prometheus HTTP API. The plugin queries one Prometheus server; it does not connect to Alertmanager or change Prometheus configuration.
+Prometheus for DBX 是一个独立、只读的 Prometheus HTTP API 工作台。插件连接单个 Prometheus 服务，提供 PromQL 查询、采集目标、活动告警、规则和运行状态查看能力；不会连接 Alertmanager，也不会修改 Prometheus 配置。
 
-## Connect
+## 版本说明
 
-Requires DBX 0.6.14+ and Host API 1. Enter the host, port, HTTP/HTTPS scheme and optional reverse-proxy context path. Basic Auth username and password are optional but must be entered together. The password is handled by DBX's password field; it is not written to the plugin source or logs. Prefer HTTPS for Basic Auth. A DBX SSH/proxy/HTTP tunnel is used when configured; if the host does not provide a tunnel endpoint, the plugin fails closed rather than connecting directly.
+### v0.1.7（2026-09-21）
 
-The connection check reads `/api/v1/status/buildinfo`. The workbench offers:
+- 采集目标、活动告警和规则改为可搜索下拉选择，无需手动输入完整关键字。
+- 支持使用鼠标或键盘选择具体项，并可随时切回“全部”。
+- 修复选择具体采集目标或活动告警后无法切回全部的问题。
+- 修复规则候选无法通过鼠标点击选中的问题。
+- 单次最多展示 200 个候选项，超出时提示继续输入关键字缩小范围。
 
-- Multiple independent PromQL panels with Table/Graph modes, per-panel execution and removable panels.
-- A PromQL editor with syntax highlighting, Prometheus-backed metric/label/value completion, lint diagnostics and `Shift+Enter` execution.
-- A searchable metric explorer that inserts the selected metric into the active query panel.
-- Evaluation-time navigation, configurable graph range/step, local-time or UTC display and persisted query history.
-- Light, system and dark themes.
-- Instant and range PromQL queries; ranges are limited to 11,000 points, responses to 4 MiB and displayed series to 100.
-- Active scrape targets, health and last errors (`/api/v1/targets`).
-- Active alerts (`/api/v1/alerts`) and recording/alerting rule groups (`/api/v1/rules`).
-- Runtime/build information, TSDB cardinality, command-line flags and loaded configuration (`/api/v1/status/*`).
-- Multi-select service discovery browsing: load scrape pools from `/api/v1/scrape_pools`, search only by the typed keyword, select up to 20 pools, and query active or dropped targets as one paginated result. The sidecar streams each selected response, counts the combined targets and returns only the requested 20, 50 or 100 item page.
+### v0.1.6
 
-All requests use GET and fixed endpoint paths; redirects are rejected. A query is executed against the configured Prometheus server, so restrict connection access and query size as appropriate to your environment. There are no native listeners, child processes or persistent plugin files.
+- 服务发现支持多选采集服务、关键字搜索和已选服务独立移除。
+- 最多合并查询 20 个服务，并对活动目标或已丢弃目标进行 20、50、100 条分页展示。
 
-## Local preview
+## 连接配置
 
-Run `npm run dev` and open `/preview.html` on the displayed local URL to inspect the four workbench views with synthetic data. The preview is explicitly labeled and does not contact a Prometheus server. Its mock bridge is not included in the packaged `ui/index.html`; the normal entrypoint still requires DBX.
+要求 DBX `0.6.14+`，Host API 版本为 `1`。
 
-## Build
+创建连接时填写主机、端口、HTTP/HTTPS 协议和可选的反向代理应用路径。Basic Auth 用户名和密码为可选项，但必须同时填写；密码由 DBX 密码字段管理，不会写入插件源码或日志。使用 Basic Auth 时建议启用 HTTPS。
 
-Requires Node.js 22+, Go 1.22+ and `@dbx-app/plugin-cli@0.1.9`.
+如果 DBX 连接配置了 SSH、代理或 HTTP 隧道，插件会使用宿主提供的隧道地址。宿主未提供隧道地址时，插件会直接失败，不会绕过隧道连接原始地址。
+
+连接测试通过 `/api/v1/status/buildinfo` 完成。
+
+## 功能
+
+- 多个相互独立的 PromQL 查询面板，支持表格/图表视图、单面板执行和删除。
+- PromQL 编辑器支持语法高亮、指标/标签/标签值补全、Lint 诊断和 `Shift+Enter` 执行。
+- 可搜索的指标浏览器，可将选中指标插入当前查询面板。
+- 支持评估时间前后移动、图表时间范围与步长配置、本地时间/UTC 切换，以及查询历史持久化。
+- 支持浅色、跟随系统和深色主题。
+- 支持瞬时查询和范围查询；范围查询最多 11,000 个点，响应最大 4 MiB，最多展示 100 条序列。
+- 查看活动采集目标、健康状态、最近采集时间和错误信息（`/api/v1/targets`）。
+- 查看活动告警（`/api/v1/alerts`）以及记录规则、告警规则组（`/api/v1/rules`）。
+- 查看运行时/构建信息、TSDB 基数、命令行参数和已加载配置（`/api/v1/status/*`）。
+- 采集目标、活动告警和规则支持可搜索下拉选择、鼠标/键盘操作及“全部”切换。
+- 服务发现支持多选：从 `/api/v1/scrape_pools` 加载服务，仅按当前输入关键字搜索，最多选择 20 个服务，并将活动目标或已丢弃目标合并为分页结果。后端以流式方式读取每个服务响应，统计合并后的目标总数，仅返回当前请求的 20、50 或 100 条数据。
+
+所有请求均使用 GET 和固定 API 路径，并拒绝重定向。查询会发送到已配置的 Prometheus 服务，请根据实际环境限制连接权限和查询规模。插件不启动本地监听端口、不创建子进程，也不写入持久化插件文件。
+
+## 本地预览
+
+运行以下命令后，打开终端中显示地址的 `/preview.html`：
+
+```sh
+npm run dev
+```
+
+预览页面使用模拟数据并明确标记为预览环境，不会访问真实 Prometheus。模拟桥接代码不会进入最终打包的 `ui/index.html`，正式入口仍必须在 DBX 中运行。
+
+## 构建与测试
+
+需要 Node.js 22+、Go 1.22+ 和 `@dbx-app/plugin-cli@0.1.9`。
 
 ```sh
 npm ci --ignore-scripts
@@ -36,13 +64,21 @@ npm run build
 go -C backend test -race ./...
 go -C backend vet ./...
 npm run package:all
-go run scripts/verify-package.go dist/io.github.caichangqing1120.prometheus-0.1.6-darwin-arm64.dbxp --handshake
+go run scripts/verify-package.go dist/io.github.caichangqing1120.prometheus-0.1.7-darwin-arm64.dbxp --handshake
 ```
 
-The packaging script produces six unsigned macOS, Windows and Linux ARM64/x64 candidates, checksums, per-target metadata and `dist/release-candidates.json`. Cross-built packages are checked for architecture and checksum but have not been run in DBX on each OS. The macOS ARM64 `0.1.6` candidate is tested against Prometheus `2.47.2` for scrape-pool discovery and multi-service target pagination; backend tests use an `httptest` fixture and UI checks use synthetic data. Packaged DBX installation evidence is recorded separately from source and preview verification.
+打包脚本会生成 macOS、Windows、Linux 的 ARM64/x64 共六个平台候选包，同时生成 SHA256 校验文件、每个平台的元数据文件和 `dist/release-candidates.json`。
 
-## Marketplace
+跨平台包会校验目标架构、入口文件和 SHA256，但未在每个操作系统的 DBX 中逐一运行。macOS ARM64 `0.1.7` 候选包会在本机 DBX 中验证真实采集目标读取和筛选交互；后端测试使用 `httptest` 固定数据，前端自动化测试使用模拟数据。源码/预览测试与安装包在 DBX 中的验证证据分别记录，不能相互替代。
 
-The source and unsigned release candidates are submitted to `t8y2/dbx-store` through a candidate PR. DBX maintainers review, sign and merge the exact bytes before the plugin appears in the official catalog. A public repository, tag or candidate PR alone is not an official listing. No signing key belongs in this repository.
+## 插件市场发布
 
-The plugin source is MIT-licensed. See `LICENSE`, `assets/THIRD_PARTY_NOTICES.txt` and `backend/sdk/PROVENANCE.md` for license and SDK provenance. Prometheus is a trademark of The Linux Foundation; this independent integration is not affiliated with the Prometheus project.
+源码和未签名候选包通过候选 PR 提交到 `t8y2/dbx-store`。DBX 维护者会审核、签名并合并完全一致的包，之后插件才会出现在官方市场。公开仓库、Git Tag 或候选 PR 本身都不代表已正式上架。
+
+签名密钥不得放入本仓库。本地构建包为未签名开发候选包，仅用于本地验证。
+
+## 许可证与商标
+
+插件源码使用 MIT License。第三方许可证和 SDK 来源见 `LICENSE`、`assets/THIRD_PARTY_NOTICES.txt` 与 `backend/sdk/PROVENANCE.md`。
+
+Prometheus 是 Linux Foundation 的商标。本插件是独立集成项目，与 Prometheus 项目无隶属或官方合作关系。
