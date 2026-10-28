@@ -2,14 +2,22 @@
   "manifest_version": 1,
   "id": "io.github.caichangqing1120.prometheus",
   "name": "Prometheus",
-  "version": "0.1.7",
+  "version": "0.2.0",
   "publisher": "caichangqing1120",
   "description": "Read-only Prometheus query, targets, alerts and rules workbench",
   "icon": "assets/plugin.svg",
-  "engines": { "dbx": ">=0.6.14", "host_api": "1" },
+  "engines": {
+    "dbx": ">=0.6.14",
+    "host_api": "1"
+  },
   "entrypoints": {
-    "backend": { "executable": "bin/dbx-plugin-prometheus" },
-    "ui": { "root": "ui", "entry": "ui/index.html" }
+    "backend": {
+      "executable": "bin/dbx-plugin-prometheus"
+    },
+    "ui": {
+      "root": "ui",
+      "entry": "ui/index.html"
+    }
   },
   "contributions": [
     {
@@ -19,23 +27,170 @@
       "icon": "assets/plugin.svg",
       "database_type": "prometheus-dbx-plugin",
       "fields": [
-        { "key": "display_name", "label": "连接名称", "type": "text", "default": "Prometheus", "binding": "name" },
-        { "key": "host", "label": "IP / 域名", "type": "text", "binding": "host", "required": true, "placeholder": "prometheus.example.com" },
-        { "key": "port", "label": "端口", "type": "number", "binding": "port", "required": true, "default": 9090 },
-        { "key": "scheme", "label": "协议", "type": "select", "binding": "config", "default": "http", "options": [{ "label": "HTTP", "value": "http" }, { "label": "HTTPS", "value": "https" }] },
-        { "key": "context_path", "label": "应用路径", "type": "text", "binding": "config", "default": "/" },
-        { "key": "username", "label": "Basic Auth 用户名（可选）", "type": "text", "binding": "username" },
-        { "key": "password", "label": "Basic Auth 密码（可选）", "type": "password", "binding": "password" },
-        { "key": "environment", "label": "环境标识", "type": "text", "binding": "config" }
+        {
+          "key": "display_name",
+          "label": "连接名称",
+          "type": "text",
+          "default": "Prometheus",
+          "binding": "name"
+        },
+        {
+          "key": "host",
+          "label": "IP / 域名",
+          "type": "text",
+          "binding": "host",
+          "required": true,
+          "placeholder": "prometheus.example.com"
+        },
+        {
+          "key": "port",
+          "label": "端口",
+          "type": "number",
+          "binding": "port",
+          "required": true,
+          "default": 9090
+        },
+        {
+          "key": "scheme",
+          "label": "协议",
+          "type": "select",
+          "binding": "config",
+          "default": "http",
+          "options": [
+            {
+              "label": "HTTP",
+              "value": "http"
+            },
+            {
+              "label": "HTTPS",
+              "value": "https"
+            }
+          ]
+        },
+        {
+          "key": "context_path",
+          "label": "应用路径",
+          "type": "text",
+          "binding": "config",
+          "default": "/"
+        },
+        {
+          "key": "username",
+          "label": "Basic Auth 用户名（可选）",
+          "type": "text",
+          "binding": "username"
+        },
+        {
+          "key": "password",
+          "label": "Basic Auth 密码（可选）",
+          "type": "password",
+          "binding": "password"
+        },
+        {
+          "key": "environment",
+          "label": "环境标识",
+          "type": "text",
+          "binding": "config"
+        }
       ],
       "workbench": "io.github.caichangqing1120.prometheus.workbench",
-      "capabilities": ["test", "connect", "disconnect"]
+      "capabilities": [
+        "test",
+        "connect",
+        "disconnect"
+      ]
     },
     {
       "type": "workbench",
       "id": "io.github.caichangqing1120.prometheus.workbench",
       "label": "Prometheus 工作台",
       "icon": "assets/plugin.svg"
+    },
+    {
+      "type": "mcp",
+      "id": "io.github.caichangqing1120.prometheus.mcp",
+      "description": "Read-only service tools. User grants remain required.",
+      "ai_tools": true,
+      "external_tools": true,
+      "toolsets": [
+        {
+          "id": "queries",
+          "title": "Queries and Metadata",
+          "description": "PromQL and completion metadata"
+        },
+        {
+          "id": "targets",
+          "title": "Targets and Discovery",
+          "description": "Scrape targets and service discovery"
+        },
+        {
+          "id": "status",
+          "title": "Status and Rules",
+          "description": "Build/runtime/TSDB status, alerts and rules"
+        }
+      ],
+      "tools": {
+        "prometheus_info": {
+          "toolset": "status",
+          "access": "read"
+        },
+        "prometheus_targets": {
+          "toolset": "targets",
+          "access": "read"
+        },
+        "prometheus_alerts": {
+          "toolset": "status",
+          "access": "read"
+        },
+        "prometheus_rules": {
+          "toolset": "status",
+          "access": "read"
+        },
+        "prometheus_status_runtime": {
+          "toolset": "status",
+          "access": "read"
+        },
+        "prometheus_status_tsdb": {
+          "toolset": "status",
+          "access": "read"
+        },
+        "prometheus_status_flags": {
+          "toolset": "status",
+          "access": "read"
+        },
+        "prometheus_status_config": {
+          "toolset": "status",
+          "access": "read"
+        },
+        "prometheus_service_discovery_services": {
+          "toolset": "targets",
+          "access": "read"
+        },
+        "prometheus_service_discovery": {
+          "toolset": "targets",
+          "access": "read"
+        },
+        "prometheus_metric_names": {
+          "toolset": "queries",
+          "access": "read"
+        },
+        "prometheus_label_names": {
+          "toolset": "queries",
+          "access": "read"
+        },
+        "prometheus_label_values": {
+          "toolset": "queries",
+          "access": "read"
+        },
+        "prometheus_query": {
+          "toolset": "queries",
+          "access": "read"
+        },
+        "prometheus_query_range": {
+          "toolset": "queries",
+          "access": "read"
+        }
+      }
     }
   ]
 }

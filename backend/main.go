@@ -10,7 +10,7 @@ import (
 )
 
 const pluginID = "io.github.caichangqing1120.prometheus"
-const version = "0.1.7"
+const version = "0.2.0"
 
 type request struct {
 	Connection   connection      `json:"connection"`
@@ -27,6 +27,9 @@ type plugin struct {
 func newPlugin() *plugin { return &plugin{sessions: make(map[string]*session)} }
 
 func (p *plugin) Handle(_ sdk.RequestContext, method string, raw json.RawMessage, _ *sdk.Emitter) (any, *sdk.PluginError) {
+	if method == "mcp/tools" || method == "mcp/call" {
+		return p.handleMCP(method, raw), nil
+	}
 	var input request
 	if err := json.Unmarshal(raw, &input); err != nil {
 		return nil, sdk.NewError(-32602, "请求参数无效")

@@ -82,3 +82,49 @@ go run scripts/verify-package.go dist/io.github.caichangqing1120.prometheus-0.1.
 插件源码使用 MIT License。第三方许可证和 SDK 来源见 `LICENSE`、`assets/THIRD_PARTY_NOTICES.txt` 与 `backend/sdk/PROVENANCE.md`。
 
 Prometheus 是 Linux Foundation 的商标。本插件是独立集成项目，与 Prometheus 项目无隶属或官方合作关系。
+
+
+## MCP Tools (0.2.0)
+
+The updated bridge exposes all 15 existing read-only operations:
+
+| Toolset | Tool names |
+| --- | --- |
+| Queries and Metadata | `prometheus_query`, `prometheus_query_range`, `prometheus_metric_names`, `prometheus_label_names`, `prometheus_label_values` |
+| Targets and Discovery | `prometheus_targets`, `prometheus_service_discovery_services`, `prometheus_service_discovery` |
+| Status and Rules | `prometheus_info`, `prometheus_alerts`, `prometheus_rules`, `prometheus_status_runtime`, `prometheus_status_tsdb`, `prometheus_status_flags`, `prometheus_status_config` |
+
+Every discovered tool has an exact manifest `access: read` declaration. There are
+no deletion, reload, shutdown or arbitrary HTTP tools. Parameters use the existing
+query names (for example `query`, `start`, `end`, `step`, `metricName`, `labelName`,
+`scrapePools`). Range queries retain the 11000-point cap and one-second minimum
+step. Service discovery retains its pool, pagination and response bounds.
+
+Use matching updated DBX and standalone MCP builds supporting per-tool grants
+(reference: upstream `8c2bbe35b`). Explicitly enable this plugin in Settings -> MCP
+-> Capabilities and authorize its connections. Built-in Agent access additionally
+uses the Plugin Center AI switch. Installation/upgrades never enable grants.
+The declared engine range is retained; older hosts may not understand the new
+contribution metadata.
+
+`mcp/tools` performs no authentication, network calls or session changes.
+`mcp/call` uses the host-bound connection credentials and transformed endpoint in
+a fresh request-local session, without connecting or replacing a workbench session.
+Model-supplied endpoints/credentials, unknown arguments and mismatched identities
+are rejected. Existing readonly HTTP endpoints and limits remain authoritative.
+Tool results are capped at 1 MiB. Authentication fields, known connection secrets,
+URL credentials and sensitive URL query parameters are redacted. Configuration
+YAML is parsed with `gopkg.in/yaml.v3` before recursive redaction, so nonsecret
+configuration remains readable; unparseable configuration is omitted rather than
+returned unsafely. This is a diagnostic preview, not a credential-bearing backup.
+The existing UI is unchanged. Local unsigned candidates and fake-service tests
+do not establish installation or live service acceptance. Verification evidence:
+`docs/specs/001-mcp-tools/validation.md`.
+
+## Version 0.2.0 Release
+
+[Author release](https://github.com/caichangqing1120/dbx-plugin-prometheus/releases/tag/v0.2.0) | [Release notes](docs/releases/v0.2.0.md). Exact packages and checksums are immutable under `v0.2.0`; official signing and production acceptance are separate.
+
+Candidate CI is explicitly dispatched with an existing immutable `tag`. Publishing locally verified assets no longer automatically rebuilds and attempts to re-upload the same immutable asset names.
+
+Fresh isolated `dbx-mcp 0.4.134` host discovery, access ceilings, readonly execution/denial and revocation validation: [`release-validation.md`](docs/specs/001-mcp-tools/release-validation.md). This is not Desktop installer/signature or production-service acceptance.

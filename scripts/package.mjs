@@ -70,6 +70,7 @@ if (requestedTarget === 'all') {
     id: manifest.id,
     publisher: manifest.publisher,
     version: manifest.version,
+    mcpTools: true,
     name: listing.name,
     description: listing.description,
     icon: `https://raw.githubusercontent.com${new URL(listing.source).pathname}/${tag}/${listing.icon}`,
