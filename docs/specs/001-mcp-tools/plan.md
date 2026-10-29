@@ -61,3 +61,16 @@ All requirements in Spec apply. No remote writes, installation, restarts, grant 
 
 - Request-local clients deliberately avoid a cache: all tools are read-only and no cross-call server state is required.
 - Configuration is parsed by pinned yaml.v3 before redaction; MIT/Apache license notice is bundled. Unknown YAML is withheld.
+
+
+## Store Compatibility Patch 0.2.1
+
+**Spec:** `spec.md`, Store Compatibility Patch 0.2.1 (2026-10-29). Existing historical upgrade tasks remain intact. The user-approved corrective patch is executed only in the current isolated worktree; commits/publication are handled separately.
+
+- [x] Confirm clean detached baseline and passing existing frontend/backend suites.
+- [x] Add `scripts/test-release-contract.mjs`: run the active generator with compiler-only fixture subprocesses, import its unmodified JSON through actual Store sync, and independently test active listing metadata. Observe both failures before implementation.
+- [x] Correct `scripts/package.mjs` author envelope and `.dbx-store.json` unsupported metadata; bump active versions and update version-aware tests/verifier.
+- [x] Run focused regression GREEN; complete frontend, backend, SDK, race, vet and production build checks. Build/verify all six targets with existing scripts and handshake the native sidecar.
+- [x] Import the real generated release without conversion using actual Store sync/validator, validate its schema and checksum/size parity; record patch-specific repo-relative notes and validation. No remote writes from this execution worker.
+
+Review focus: flat author-vs-Store candidate confusion, unsupported metadata fields, altered MCP contributions, missing architecture assets, and stale initialize/package versions. The regression exercises the real importer/validator rather than reproducing the output builder's expectations. No execution helpers or legacy ledgers are used.

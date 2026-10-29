@@ -11,6 +11,5 @@
   "source": "https://github.com/caichangqing1120/dbx-plugin-prometheus",
   "homepage": "https://github.com/caichangqing1120/dbx-plugin-prometheus",
   "license": "MIT",
-  "releaseNotes": "Adds 15 read-only MCP tools with explicit access declarations, host-bound lifecycle execution and redacted output. User authorization remains required.",
-  "mcpTools": true
+  "releaseNotes": "Fix author release metadata for DBX Store synchronization in 0.2.1. All 15 read-only MCP tools, access declarations and user-controlled grants remain unchanged."
 }

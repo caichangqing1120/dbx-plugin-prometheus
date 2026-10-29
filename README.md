@@ -1,5 +1,7 @@
 # Prometheus for DBX
 
+Current plugin version: `0.2.1`.
+
 Prometheus for DBX 是一个独立、只读的 Prometheus HTTP API 工作台。插件连接单个 Prometheus 服务，提供 PromQL 查询、采集目标、活动告警、规则和运行状态查看能力；不会连接 Alertmanager，也不会修改 Prometheus 配置。
 
 ## 版本说明
@@ -64,7 +66,7 @@ npm run build
 go -C backend test -race ./...
 go -C backend vet ./...
 npm run package:all
-go run scripts/verify-package.go dist/io.github.caichangqing1120.prometheus-0.1.7-darwin-arm64.dbxp --handshake
+go run scripts/verify-package.go dist/io.github.caichangqing1120.prometheus-0.2.1-darwin-arm64.dbxp --handshake
 ```
 
 打包脚本会生成 macOS、Windows、Linux 的 ARM64/x64 共六个平台候选包，同时生成 SHA256 校验文件、每个平台的元数据文件和 `dist/release-candidates.json`。
@@ -120,6 +122,29 @@ returned unsafely. This is a diagnostic preview, not a credential-bearing backup
 The existing UI is unchanged. Local unsigned candidates and fake-service tests
 do not establish installation or live service acceptance. Verification evidence:
 `docs/specs/001-mcp-tools/validation.md`.
+
+## Version 0.2.1 Store Compatibility Patch
+
+[Release notes](docs/releases/v0.2.1.md) | [Patch validation](docs/specs/001-mcp-tools/store-compatibility-validation.md).
+The packaging script now emits the author release envelope expected by DBX Store:
+`{plugin: {id, publisher, version, name, description, permissions}, artifacts: [{target, url, sha256, size}]}`.
+This is not the Store's flat catalog candidate. `.dbx-store.json` uses only supported
+listing fields; MCP capability/access declarations remain unchanged in `manifest.json`.
+All six unsigned packages and their checksum/metadata files are still generated.
+The 0.2.0 release and its historical validation are preserved, not overwritten.
+
+Run the actual Store importer and validator regression against a Store checkout:
+
+```sh
+DBX_STORE_ROOT=/path/to/dbx-store npm run test:release
+DBX_STORE_ROOT=/path/to/dbx-store DBX_RELEASE_CANDIDATE=dist/release-candidates.json npm run test:release
+```
+
+The first command substitutes compiler output with public fixtures but runs the real
+release generator and Store scripts. The second also imports the actual built release
+without converting its shape and compares all six artifacts to local package bytes.
+These checks do not grant MCP access, install plugins, sign packages or establish live
+service/desktop acceptance. Publication and official Store review are separate steps.
 
 ## Version 0.2.0 Release
 
