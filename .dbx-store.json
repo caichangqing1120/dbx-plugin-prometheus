@@ -8,8 +8,8 @@
     "observability"
   ],
   "permissions": [],
-  "source": "https://github.com/caichangqing1120/dbx-plugin-prometheus",
+  "source": "https://github.com/caichangqing1120/dbx-plugin-prometheus/tree/v0.2.2",
   "homepage": "https://github.com/caichangqing1120/dbx-plugin-prometheus",
   "license": "MIT",
-  "releaseNotes": "Fix author release metadata for DBX Store synchronization in 0.2.1. All 15 read-only MCP tools, access declarations and user-controlled grants remain unchanged."
+  "releaseNotes": "0.2.2 is the first Store update since 0.1.7. It exposes 15 read-only MCP tools over the existing Prometheus API (PromQL instant and range queries, metric/label discovery, targets and service discovery, alerts, rules, and runtime/TSDB/flags/config status) with explicit access declarations, host-bound lifecycle identity and redacted output; manifest permissions remain empty and upgrading grants no access. It also corrects the author release metadata so DBX Store can import the release, and removes the unsupported mcpTools field. UI and service behavior are unchanged. A matching updated DBX Desktop and standalone MCP are required."
 }

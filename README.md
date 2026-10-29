@@ -1,8 +1,28 @@
 # Prometheus for DBX
 
-Current plugin version: `0.2.1`.
+Current plugin version: `0.2.2`.
 
 Prometheus for DBX 是一个独立、只读的 Prometheus HTTP API 工作台。插件连接单个 Prometheus 服务，提供 PromQL 查询、采集目标、活动告警、规则和运行状态查看能力；不会连接 Alertmanager，也不会修改 Prometheus 配置。
+
+## 0.2.2 Store Update And CI Provenance
+
+This is the first Store update since **0.1.7**. Neither **0.2.0** nor **0.2.1**
+entered the Store, so users receive 15 read-only MCP tools, not only an author
+metadata fix: PromQL instant/range queries, metric/label discovery, targets/service
+discovery, alerts, rules, and runtime/TSDB/flags/config status. They wrap the existing
+API with explicit access declarations, host-bound lifecycle identity and redacted
+output. Manifest permissions remain empty; upgrading grants no access. Matching
+updated DBX Desktop and standalone MCP builds are required. UI and service behavior
+are unchanged.
+
+The release also corrects the author metadata envelope and removes the unsupported
+`mcpTools` Store field. Source is pinned to
+[`v0.2.2`](https://github.com/caichangqing1120/dbx-plugin-prometheus/tree/v0.2.2).
+Clean CI using the official reusable workflow and mandatory full VCS provenance
+verification by the release helper must precede publication and Store resubmission.
+Those gates are pending; these source changes do not establish a successful CI run,
+verified release bytes or Store signing. See [0.2.2 notes](docs/releases/v0.2.2.md).
+Earlier versioned notes, validation receipts, tags and assets remain unchanged.
 
 ## 版本说明
 
@@ -66,7 +86,7 @@ npm run build
 go -C backend test -race ./...
 go -C backend vet ./...
 npm run package:all
-go run scripts/verify-package.go dist/io.github.caichangqing1120.prometheus-0.2.1-darwin-arm64.dbxp --handshake
+go run scripts/verify-package.go dist/io.github.caichangqing1120.prometheus-0.2.2-darwin-arm64.dbxp --handshake
 ```
 
 打包脚本会生成 macOS、Windows、Linux 的 ARM64/x64 共六个平台候选包，同时生成 SHA256 校验文件、每个平台的元数据文件和 `dist/release-candidates.json`。
@@ -123,7 +143,7 @@ The existing UI is unchanged. Local unsigned candidates and fake-service tests
 do not establish installation or live service acceptance. Verification evidence:
 `docs/specs/001-mcp-tools/validation.md`.
 
-## Version 0.2.1 Store Compatibility Patch
+## Historical Version 0.2.1 Store Compatibility Patch
 
 [Release notes](docs/releases/v0.2.1.md) | [Patch validation](docs/specs/001-mcp-tools/store-compatibility-validation.md).
 The packaging script now emits the author release envelope expected by DBX Store:
@@ -150,6 +170,6 @@ service/desktop acceptance. Publication and official Store review are separate s
 
 [Author release](https://github.com/caichangqing1120/dbx-plugin-prometheus/releases/tag/v0.2.0) | [Release notes](docs/releases/v0.2.0.md). Exact packages and checksums are immutable under `v0.2.0`; official signing and production acceptance are separate.
 
-Candidate CI is explicitly dispatched with an existing immutable `tag`. Publishing locally verified assets no longer automatically rebuilds and attempts to re-upload the same immutable asset names.
+For the historical 0.2.0 release, candidate CI was explicitly dispatched with an existing immutable `tag`. The 0.2.2 release instead requires the clean official reusable workflow and provenance verification described above; prior assets must not be overwritten.
 
 Fresh isolated `dbx-mcp 0.4.134` host discovery, access ceilings, readonly execution/denial and revocation validation: [`release-validation.md`](docs/specs/001-mcp-tools/release-validation.md). This is not Desktop installer/signature or production-service acceptance.
